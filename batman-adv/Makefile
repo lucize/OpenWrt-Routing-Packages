@@ -9,14 +9,16 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=batman-adv
 
-PKG_VERSION:=2017.2
-PKG_RELEASE:=1
-PKG_MD5SUM:=937b5f1d0188e3522d67ad45ee0a4f5a
-PKG_HASH:=d487974e21cb53d39f139e93a2cf297807df5b7bf63ba6d810bad6d91537394f
+PKG_VERSION:=2019.3
+PKG_RELEASE:=0
+PKG_HASH:=3454dc8bd6cb264e2decda1b99ef3f837535ed33802abc6c39551c181d3984ce
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=https://downloads.open-mesh.org/batman/releases/batman-adv-$(PKG_VERSION)
 PKG_LICENSE:=GPL-2.0
+PKG_EXTMOD_SUBDIRS=net/batman-adv
+
+STAMP_CONFIGURED_DEPENDS := $(STAGING_DIR)/usr/include/mac80211-backport/backport/autoconf.h
 
 include $(INCLUDE_DIR)/kernel.mk
 include $(INCLUDE_DIR)/package.mk
@@ -25,16 +27,19 @@ define KernelPackage/batman-adv
   URL:=https://www.open-mesh.org/
   MAINTAINER:=Simon Wunderlich <sw@simonwunderlich.de>
   SUBMENU:=Network Support
-  DEPENDS:=+KMOD_BATMAN_ADV_BLA:kmod-lib-crc16 +kmod-crypto-crc32c +kmod-lib-crc32c +kmod-cfg80211
+  DEPENDS:=+BATMAN_ADV_BLA:kmod-lib-crc16 +kmod-lib-crc32c +kmod-cfg80211 +batctl
   TITLE:=B.A.T.M.A.N. Adv
   FILES:=$(PKG_BUILD_DIR)/net/batman-adv/batman-adv.$(LINUX_KMOD_SUFFIX)
-  AUTOLOAD:=$(call AutoLoad,50,cfg80211 batman-adv)
+  AUTOLOAD:=$(call AutoProbe,batman-adv)
 endef
 
 define KernelPackage/batman-adv/description
-B.A.T.M.A.N. advanced is a kernel module which allows to
-build layer 2 mesh networks. This package builds
-version $(PKG_VERSION) of the kernel module.
+B.A.T.M.A.N. (better approach to mobile ad-hoc networking) is
+a routing protocol for multi-hop ad-hoc mesh networks. The
+networks may be wired or wireless. See
+https://www.open-mesh.org/ for more information and user space
+tools. This package builds version $(PKG_VERSION) of the kernel
+module.
 endef
 
 define KernelPackage/batman-adv/config
@@ -47,13 +52,15 @@ endef
 
 PKG_EXTRA_KCONFIG:= \
 	CONFIG_BATMAN_ADV=m \
-	CONFIG_BATMAN_ADV_DEBUG=$(if $(CONFIG_KMOD_BATMAN_ADV_DEBUG_LOG),y,n) \
-	CONFIG_BATMAN_ADV_DEBUGFS=$(if $(CONFIG_KMOD_BATMAN_ADV_DEBUGFS),y,n) \
-	CONFIG_BATMAN_ADV_BLA=$(if $(CONFIG_KMOD_BATMAN_ADV_BLA),y,n) \
-	CONFIG_BATMAN_ADV_DAT=$(if $(CONFIG_KMOD_BATMAN_ADV_DAT),y,n) \
-	CONFIG_BATMAN_ADV_MCAST=$(if $(CONFIG_KMOD_BATMAN_ADV_MCAST),y,n) \
-	CONFIG_BATMAN_ADV_NC=$(if $(CONFIG_KMOD_BATMAN_ADV_NC),y,n) \
-	CONFIG_BATMAN_ADV_BATMAN_V=$(if $(CONFIG_KMOD_BATMAN_ADV_BATMAN_V),y,n) \
+	CONFIG_BATMAN_ADV_DEBUG=$(if $(CONFIG_BATMAN_ADV_DEBUG),y,n) \
+	CONFIG_BATMAN_ADV_DEBUGFS=$(if $(CONFIG_BATMAN_ADV_DEBUGFS),y,n) \
+	CONFIG_BATMAN_ADV_BLA=$(if $(CONFIG_BATMAN_ADV_BLA),y,n) \
+	CONFIG_BATMAN_ADV_DAT=$(if $(CONFIG_BATMAN_ADV_DAT),y,n) \
+	CONFIG_BATMAN_ADV_MCAST=$(if $(CONFIG_BATMAN_ADV_MCAST),y,n) \
+	CONFIG_BATMAN_ADV_NC=$(if $(CONFIG_BATMAN_ADV_NC),y,n) \
+	CONFIG_BATMAN_ADV_BATMAN_V=$(if $(CONFIG_BATMAN_ADV_BATMAN_V),y,n) \
+	CONFIG_BATMAN_ADV_SYSFS=$(if $(CONFIG_BATMAN_ADV_SYSFS),y,n) \
+	CONFIG_BATMAN_ADV_TRACING=$(if $(CONFIG_BATMAN_ADV_TRACING),y,n) \
 
 PKG_EXTRA_CFLAGS:= \
 	$(patsubst CONFIG_%, -DCONFIG_%=1, $(patsubst %=m,%,$(filter %=m,$(PKG_EXTRA_KCONFIG)))) \
@@ -67,12 +74,13 @@ NOSTDINC_FLAGS = \
 	-I$(STAGING_DIR)/usr/include/mac80211/uapi \
 	-I$(PKG_BUILD_DIR)/include/ \
 	-include backport/backport.h \
-	-include $(PKG_BUILD_DIR)/compat-hacks.h
+	-include $(PKG_BUILD_DIR)/compat-hacks.h \
+	-DBATADV_SOURCE_VERSION=\\\"openwrt-$(PKG_VERSION)-$(PKG_RELEASE)\\\"
 
 COMPAT_SOURCES = \
-	$(if $(CONFIG_KMOD_BATMAN_ADV_MCAST),../../compat-sources/net/core/skbuff.o,) \
-	$(if $(CONFIG_KMOD_BATMAN_ADV_MCAST),../../compat-sources/net/ipv4/igmp.o,) \
-	$(if $(CONFIG_KMOD_BATMAN_ADV_MCAST),../../compat-sources/net/ipv6/mcast_snoop.o,) \
+	$(if $(CONFIG_BATMAN_ADV_MCAST),../../compat-sources/net/core/skbuff.o,) \
+	$(if $(CONFIG_BATMAN_ADV_MCAST),../../compat-sources/net/ipv4/igmp.o,) \
+	$(if $(CONFIG_BATMAN_ADV_MCAST),../../compat-sources/net/ipv6/mcast_snoop.o,) \
 
 define Build/Compile
 	+env "batman-adv-y=$(COMPAT_SOURCES)" \
@@ -86,22 +94,8 @@ define Build/Compile
 		modules
 endef
 
-define Build/Prepare
-	$(call Build/Prepare/Default)
-	$(CP) ./files/compat-hacks.h $(PKG_BUILD_DIR)/
-endef
-
-define Build/Clean
-        rm -rf $(BUILD_DIR)/$(PKG_NAME)/
-endef
-
 define KernelPackage/batman-adv/install
-	$(INSTALL_DIR) $(1)/etc/config $(1)/etc/hotplug.d/net $(1)/etc/hotplug.d/iface $(1)/lib/batman-adv $(1)/usr/sbin $(1)/lib/netifd/proto
-	$(INSTALL_DATA) ./files/etc/config/batman-adv $(1)/etc/config
-	$(INSTALL_DATA) ./files/lib/batman-adv/config.sh $(1)/lib/batman-adv
-	$(INSTALL_BIN) ./files/etc/hotplug.d/net/99-batman-adv $(1)/etc/hotplug.d/net
-	$(INSTALL_BIN) ./files/lib/netifd/proto/batadv.sh $(1)/lib/netifd/proto
-	$(INSTALL_BIN) ./files/lib/netifd/proto/batadv_vlan.sh $(1)/lib/netifd/proto
+	$(CP) ./files/. $(1)/
 endef
 
 $(eval $(call KernelPackage,batman-adv))

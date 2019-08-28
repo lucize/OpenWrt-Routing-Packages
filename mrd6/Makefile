@@ -10,10 +10,10 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=mrd6
 PKG_SOURCE_VERSION:=c805eb33255dbc0b6647d463c6c67d1c9d3105a0
 PKG_VERSION:=2013-11-30-$(PKG_SOURCE_VERSION)
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=git://github.com/hugosantos/mrd6.git
+PKG_SOURCE_URL:=https://github.com/hugosantos/mrd6.git
 PKG_MAINTAINER:=Steven Barth <cyrus@openwrt.org>
 PKG_LICENSE:=GPL-2.0+
 
